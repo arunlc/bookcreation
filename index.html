@@ -363,6 +363,8 @@
 
     <script>
         let documentText = '';
+        let documentHTML = '';
+        let documentStructure = [];
         let processedPages = [];
 
         // File upload handling
@@ -394,6 +396,9 @@
             }
         });
 
+        let documentHTML = '';
+        let documentStructure = [];
+
         function handleFile(file) {
             if (!file.name.match(/\.(docx|doc)$/i)) {
                 showStatus('Please select a Word document (.docx or .doc)', 'error');
@@ -407,23 +412,98 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 updateProgress(50);
-                mammoth.extractRawText({arrayBuffer: e.target.result})
-                    .then(function(result) {
-                        documentText = result.value;
-                        updateProgress(100);
-                        showStatus('Document loaded successfully!', 'success');
-                        setTimeout(() => showProgress(false), 1000);
-                    })
-                    .catch(function(err) {
-                        showStatus('Error reading document: ' + err.message, 'error');
-                        showProgress(false);
-                    });
+                
+                // Extract both HTML (with formatting) and raw text
+                const options = {
+                    convertImage: mammoth.images.imgElement(function(image) {
+                        return image.read("base64").then(function(imageBuffer) {
+                            return {
+                                src: "data:" + image.contentType + ";base64," + imageBuffer
+                            };
+                        });
+                    }),
+                    styleMap: [
+                        "p[style-name='Heading 1'] => h1:fresh",
+                        "p[style-name='Heading 2'] => h2:fresh",
+                        "p[style-name='Heading 3'] => h3:fresh",
+                        "p[style-name='Title'] => h1.title:fresh",
+                        "p[style-name='Subtitle'] => h2.subtitle:fresh",
+                        "r[style-name='Strong'] => strong",
+                        "r[style-name='Emphasis'] => em"
+                    ]
+                };
+
+                Promise.all([
+                    mammoth.convertToHtml({arrayBuffer: e.target.result}, options),
+                    mammoth.extractRawText({arrayBuffer: e.target.result})
+                ]).then(function(results) {
+                    documentHTML = results[0].value;
+                    documentText = results[1].value;
+                    
+                    // Parse document structure
+                    documentStructure = parseDocumentStructure(documentHTML);
+                    
+                    updateProgress(100);
+                    showStatus('Document loaded successfully with formatting!', 'success');
+                    setTimeout(() => showProgress(false), 1000);
+                    
+                    // Show a preview of detected formatting
+                    showFormattingPreview(documentStructure);
+                })
+                .catch(function(err) {
+                    showStatus('Error reading document: ' + err.message, 'error');
+                    showProgress(false);
+                });
             };
             reader.readAsArrayBuffer(file);
         }
 
+        function parseDocumentStructure(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const elements = doc.body.children;
+            const structure = [];
+            
+            for (let element of elements) {
+                const item = {
+                    tag: element.tagName.toLowerCase(),
+                    content: element.textContent.trim(),
+                    html: element.outerHTML,
+                    isHeading: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(element.tagName.toLowerCase()),
+                    isEmpty: element.textContent.trim() === ''
+                };
+                
+                if (!item.isEmpty) {
+                    structure.push(item);
+                }
+            }
+            
+            return structure;
+        }
+
+        function showFormattingPreview(structure) {
+            const headings = structure.filter(item => item.isHeading);
+            if (headings.length > 0) {
+                const previewDiv = document.createElement('div');
+                previewDiv.style.cssText = `
+                    background: #e8f5e8; 
+                    padding: 15px; 
+                    border-radius: 8px; 
+                    margin: 15px 0; 
+                    border-left: 4px solid #28a745;
+                `;
+                previewDiv.innerHTML = `
+                    <strong>📋 Detected Document Structure:</strong><br>
+                    <small style="color: #666;">Found ${headings.length} headings that will be used for chapters/sections</small><br>
+                    ${headings.slice(0, 5).map(h => `• ${h.content}`).join('<br>')}
+                    ${headings.length > 5 ? '<br>• ... and more' : ''}
+                `;
+                fileName.appendChild(previewDiv);
+            }
+        }
+
         function processDocument() {
-            if (!documentText) {
+            if (!documentHTML && !documentText) {
                 showStatus('Please upload a document first', 'error');
                 return;
             }
@@ -438,57 +518,133 @@
 
             updateProgress(30);
 
-            // Process the document based on settings
-            processedPages = createBookLayout(documentText, bookType, wordsPerPage, illustrationFreq);
+            // Process the document based on settings with formatting preserved
+            processedPages = createFormattedBookLayout(documentStructure, bookType, wordsPerPage, illustrationFreq);
             
             updateProgress(70);
 
             // Render the results
-            renderPages(processedPages);
+            renderFormattedPages(processedPages);
             
             updateProgress(100);
             document.getElementById('resultsSection').style.display = 'block';
             document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
             
-            showStatus(`Successfully generated ${processedPages.length} pages!`, 'success');
+            showStatus(`Successfully generated ${processedPages.length} pages with formatting!`, 'success');
             setTimeout(() => showProgress(false), 1000);
         }
 
-        function createBookLayout(text, bookType, wordsPerPage, illustrationFreq) {
+        function createFormattedBookLayout(structure, bookType, wordsPerPage, illustrationFreq) {
             const pages = [];
-            let currentText = text.trim();
+            let currentPageContent = [];
+            let currentWordCount = 0;
+            let pageNumber = 1;
+            let chapterNumber = 1;
 
-            // Clean and prepare text
-            currentText = currentText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n');
-
-            if (bookType === 'chapter') {
-                // Split by chapters
-                const chapters = currentText.split(/(?:^|\n)(?:Chapter|CHAPTER)\s*\d+/i);
-                chapters.forEach((chapter, index) => {
-                    if (chapter.trim()) {
-                        const chapterTitle = index > 0 ? `Chapter ${index}` : 'Introduction';
-                        const chapterPages = splitTextIntoPages(chapter.trim(), wordsPerPage, illustrationFreq);
-                        chapterPages[0].title = chapterTitle;
-                        pages.push(...chapterPages);
+            if (bookType === 'chapter' || bookType === 'collection') {
+                // Group content by headings
+                let currentSection = [];
+                let sectionTitle = null;
+                
+                for (let item of structure) {
+                    if (item.isHeading) {
+                        // Process previous section
+                        if (currentSection.length > 0) {
+                            const sectionPages = createPagesFromSection(currentSection, sectionTitle, wordsPerPage, illustrationFreq, pageNumber);
+                            pages.push(...sectionPages);
+                            pageNumber += sectionPages.length;
+                        }
+                        
+                        // Start new section
+                        sectionTitle = item.content;
+                        currentSection = [];
+                        chapterNumber++;
+                    } else {
+                        currentSection.push(item);
                     }
-                });
-            } else if (bookType === 'collection') {
-                // Split by stories (assuming stories are separated by multiple line breaks)
-                const stories = currentText.split(/\n\s*\n\s*\n/);
-                stories.forEach((story, index) => {
-                    if (story.trim()) {
-                        const storyTitle = `Story ${index + 1}`;
-                        const storyPages = splitTextIntoPages(story.trim(), wordsPerPage, illustrationFreq);
-                        storyPages[0].title = storyTitle;
-                        pages.push(...storyPages);
-                    }
-                });
+                }
+                
+                // Process final section
+                if (currentSection.length > 0) {
+                    const sectionPages = createPagesFromSection(currentSection, sectionTitle, wordsPerPage, illustrationFreq, pageNumber);
+                    pages.push(...sectionPages);
+                }
             } else {
-                // Regular text splitting
-                pages.push(...splitTextIntoPages(currentText, wordsPerPage, illustrationFreq));
+                // Process as continuous content
+                for (let item of structure) {
+                    const itemWordCount = item.content.split(/\s+/).length;
+                    
+                    // Check if adding this item would exceed word limit
+                    if (currentWordCount + itemWordCount > wordsPerPage && currentPageContent.length > 0) {
+                        // Create page with current content
+                        pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
+                        currentPageContent = [];
+                        currentWordCount = 0;
+                        pageNumber++;
+                    }
+                    
+                    currentPageContent.push(item);
+                    currentWordCount += itemWordCount;
+                    
+                    // For headings, consider starting a new page after
+                    if (item.isHeading && currentPageContent.length > 1) {
+                        pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
+                        currentPageContent = [];
+                        currentWordCount = 0;
+                        pageNumber++;
+                    }
+                }
+                
+                // Add remaining content
+                if (currentPageContent.length > 0) {
+                    pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
+                }
             }
 
             return pages;
+        }
+
+        function createPagesFromSection(sectionContent, title, wordsPerPage, illustrationFreq, startPageNumber) {
+            const pages = [];
+            let currentPageContent = [];
+            let currentWordCount = 0;
+            let pageNumber = startPageNumber;
+
+            for (let item of sectionContent) {
+                const itemWordCount = item.content.split(/\s+/).length;
+                
+                if (currentWordCount + itemWordCount > wordsPerPage && currentPageContent.length > 0) {
+                    pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber, pages.length === 0 ? title : null));
+                    currentPageContent = [];
+                    currentWordCount = 0;
+                    pageNumber++;
+                }
+                
+                currentPageContent.push(item);
+                currentWordCount += itemWordCount;
+            }
+            
+            if (currentPageContent.length > 0) {
+                pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber, pages.length === 0 ? title : null));
+            }
+
+            return pages;
+        }
+
+        function createFormattedPage(pageNum, contentItems, illustrationFreq, totalPage, title = null) {
+            const needsIllustration = shouldHaveIllustration(illustrationFreq, totalPage);
+            const totalWords = contentItems.reduce((sum, item) => sum + item.content.split(/\s+/).length, 0);
+            
+            return {
+                number: pageNum,
+                contentItems: contentItems,
+                formattedHTML: contentItems.map(item => item.html).join(''),
+                plainText: contentItems.map(item => item.content).join('\n\n'),
+                hasIllustration: needsIllustration,
+                title: title,
+                wordCount: totalWords,
+                hasHeadings: contentItems.some(item => item.isHeading)
+            };
         }
 
         function splitTextIntoPages(text, wordsPerPage, illustrationFreq) {
@@ -547,7 +703,7 @@
             }
         }
 
-        function renderPages(pages) {
+        function renderFormattedPages(pages) {
             const container = document.getElementById('pagesContainer');
             container.innerHTML = '';
 
@@ -558,8 +714,15 @@
                 const headerDiv = document.createElement('div');
                 headerDiv.className = 'page-header';
                 headerDiv.innerHTML = `
-                    <span>${page.title || `Page ${page.number}`} (${page.wordCount} words)</span>
-                    <button class="copy-button" onclick="copyPage(${index})">Copy Page</button>
+                    <span>
+                        ${page.title || `Page ${page.number}`} 
+                        (${page.wordCount} words)
+                        ${page.hasHeadings ? ' • Contains Headings' : ''}
+                    </span>
+                    <div>
+                        <button class="copy-button" onclick="copyFormattedPage(${index}, 'formatted')" style="margin-right: 5px;">Copy HTML</button>
+                        <button class="copy-button" onclick="copyFormattedPage(${index}, 'plain')">Copy Text</button>
+                    </div>
                 `;
 
                 const contentDiv = document.createElement('div');
@@ -568,16 +731,83 @@
                     contentDiv.classList.add('illustration-space');
                 }
 
+                let pageContent = '';
+                
                 if (page.hasIllustration) {
-                    contentDiv.innerHTML = `
+                    pageContent += `
                         <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
                             <strong>🎨 Illustration Space</strong><br>
                             <small>This page should include an illustration based on the content below.</small>
                         </div>
-                        <div style="white-space: pre-wrap;">${page.content}</div>
                     `;
-                } else {
-                    contentDiv.innerHTML = `<div style="white-space: pre-wrap;">${page.content}</div>`;
+                }
+
+                // Add formatted content with proper styling
+                pageContent += `
+                    <div class="formatted-content" style="
+                        font-family: Georgia, serif;
+                        line-height: 1.6;
+                        color: #333;
+                    ">
+                        ${page.formattedHTML}
+                    </div>
+                `;
+
+                contentDiv.innerHTML = pageContent;
+                
+                // Apply additional styling to the formatted content
+                const formattedDiv = contentDiv.querySelector('.formatted-content');
+                if (formattedDiv) {
+                    // Style headings
+                    const headings = formattedDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    headings.forEach(heading => {
+                        heading.style.cssText = `
+                            color: #2c3e50;
+                            margin: 20px 0 15px 0;
+                            font-weight: bold;
+                            border-bottom: 2px solid #3498db;
+                            padding-bottom: 5px;
+                        `;
+                    });
+
+                    // Style paragraphs
+                    const paragraphs = formattedDiv.querySelectorAll('p');
+                    paragraphs.forEach(p => {
+                        p.style.cssText = `
+                            margin: 12px 0;
+                            text-align: justify;
+                        `;
+                    });
+
+                    // Style emphasis
+                    const emphasis = formattedDiv.querySelectorAll('em, i');
+                    emphasis.forEach(em => {
+                        em.style.cssText = `
+                            font-style: italic;
+                            color: #7f8c8d;
+                        `;
+                    });
+
+                    // Style strong text
+                    const strong = formattedDiv.querySelectorAll('strong, b');
+                    strong.forEach(s => {
+                        s.style.cssText = `
+                            font-weight: bold;
+                            color: #2c3e50;
+                        `;
+                    });
+
+                    // Handle images
+                    const images = formattedDiv.querySelectorAll('img');
+                    images.forEach(img => {
+                        img.style.cssText = `
+                            max-width: 100%;
+                            height: auto;
+                            border-radius: 8px;
+                            margin: 15px 0;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                        `;
+                    });
                 }
 
                 pageDiv.appendChild(headerDiv);
@@ -586,21 +816,69 @@
             });
         }
 
-        function copyPage(index) {
+        function copyFormattedPage(index, format) {
             const page = processedPages[index];
-            let textToCopy = page.content;
+            let textToCopy = '';
             
-            if (page.hasIllustration) {
-                textToCopy = `[ILLUSTRATION SPACE]\n\n${textToCopy}`;
-            }
-            
-            if (page.title) {
-                textToCopy = `${page.title}\n\n${textToCopy}`;
+            if (format === 'formatted') {
+                // Copy HTML with Canva-friendly formatting
+                textToCopy = convertToCanvaFormat(page);
+            } else {
+                // Copy plain text
+                textToCopy = page.plainText;
+                
+                if (page.hasIllustration) {
+                    textToCopy = `[ILLUSTRATION SPACE]\n\n${textToCopy}`;
+                }
+                
+                if (page.title) {
+                    textToCopy = `${page.title}\n\n${textToCopy}`;
+                }
             }
 
             navigator.clipboard.writeText(textToCopy).then(() => {
-                showStatus('Page copied to clipboard!', 'success');
+                showStatus(`Page copied to clipboard (${format} format)!`, 'success');
             });
+        }
+
+        function convertToCanvaFormat(page) {
+            let canvaText = '';
+            
+            if (page.title) {
+                canvaText += `**${page.title}**\n\n`;
+            }
+            
+            if (page.hasIllustration) {
+                canvaText += `[ADD ILLUSTRATION HERE]\n\n`;
+            }
+            
+            // Convert HTML to Canva-friendly markdown-style formatting
+            page.contentItems.forEach(item => {
+                if (item.isHeading) {
+                    canvaText += `**${item.content}**\n\n`;
+                } else {
+                    // Convert HTML to simpler formatting
+                    let content = item.html;
+                    
+                    // Convert strong/bold
+                    content = content.replace(/<(strong|b)>(.*?)<\/(strong|b)>/gi, '**$2**');
+                    
+                    // Convert emphasis/italic
+                    content = content.replace(/<(em|i)>(.*?)<\/(em|i)>/gi, '*$2*');
+                    
+                    // Remove HTML tags but keep content
+                    content = content.replace(/<[^>]*>/g, '');
+                    
+                    // Clean up extra whitespace
+                    content = content.replace(/\s+/g, ' ').trim();
+                    
+                    if (content) {
+                        canvaText += `${content}\n\n`;
+                    }
+                }
+            });
+            
+            return canvaText;
         }
 
         function copyAllPages() {
