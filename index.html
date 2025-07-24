@@ -319,10 +319,8 @@
                 <div class="setting-group">
                     <h3>📏 Book Size</h3>
                     <select id="bookSize" class="form-control">
-                        <option value="picture">Picture Book (8.5" x 8.5")</option>
-                        <option value="standard">Standard (6" x 9")</option>
-                        <option value="large">Large Format (8.5" x 11")</option>
-                        <option value="square">Square (7" x 7")</option>
+                        <option value="illustration">Illustration Book (8" x 8")</option>
+                        <option value="standard">Standard Book (5.5" x 8.5")</option>
                     </select>
                 </div>
 
@@ -367,8 +365,103 @@
         let documentStructure = [];
         let processedPages = [];
 
-        // File upload handling
-        const uploadSection = document.getElementById('uploadSection');
+        // Add debug console to the page
+        function addDebugConsole() {
+            const debugDiv = document.createElement('div');
+            debugDiv.id = 'debugConsole';
+            debugDiv.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 400px;
+                max-height: 300px;
+                background: #1a1a1a;
+                color: #00ff00;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                overflow-y: auto;
+                z-index: 1000;
+                display: none;
+            `;
+            debugDiv.innerHTML = `
+                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                    <strong style="color: #ffffff;">🐛 Debug Console</strong>
+                    <button onclick="document.getElementById('debugConsole').style.display='none'" style="background: #ff4444; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px;">✕</button>
+                </div>
+                <div id="debugLog"></div>
+            `;
+            document.body.appendChild(debugDiv);
+        }
+
+        function showDebugConsole() {
+            const debugConsole = document.getElementById('debugConsole');
+            if (!debugConsole) {
+                addDebugConsole();
+            }
+            document.getElementById('debugConsole').style.display = 'block';
+        }
+
+        function logToDebug(message, type = 'info') {
+            const debugLog = document.getElementById('debugLog');
+            if (debugLog) {
+                const colors = {
+                    info: '#00ff00',
+                    warn: '#ffaa00', 
+                    error: '#ff4444',
+                    success: '#00aa00'
+                };
+                
+                const timestamp = new Date().toLocaleTimeString();
+                debugLog.innerHTML += `<div style="color: ${colors[type] || '#00ff00'}; margin-bottom: 3px;">[${timestamp}] ${message}</div>`;
+                debugLog.scrollTop = debugLog.scrollHeight;
+            }
+        }
+
+        // Override console methods to also log to debug panel
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+
+        console.log = function(...args) {
+            originalConsoleLog.apply(console, args);
+            logToDebug(args.join(' '), 'info');
+        };
+
+        console.error = function(...args) {
+            originalConsoleError.apply(console, args);
+            logToDebug('ERROR: ' + args.join(' '), 'error');
+        };
+
+        console.warn = function(...args) {
+            originalConsoleWarn.apply(console, args);
+            logToDebug('WARN: ' + args.join(' '), 'warn');
+        };
+
+        // Add debug button to header
+        window.addEventListener('load', function() {
+            console.log('🚀 App loaded successfully');
+            const header = document.querySelector('.header');
+            const debugButton = document.createElement('button');
+            debugButton.textContent = '🐛 Debug';
+            debugButton.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: rgba(255,255,255,0.2);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.3);
+                padding: 5px 10px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 12px;
+            `;
+            debugButton.onclick = showDebugConsole;
+            header.style.position = 'relative';
+            header.appendChild(debugButton);
+        });
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
 
@@ -400,7 +493,16 @@
         let documentStructure = [];
 
         function handleFile(file) {
+            console.log('🔍 Starting file upload process...');
+            console.log('📄 File details:', {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: new Date(file.lastModified).toISOString()
+            });
+
             if (!file.name.match(/\.(docx|doc)$/i)) {
+                console.error('❌ Invalid file type:', file.name);
                 showStatus('Please select a Word document (.docx or .doc)', 'error');
                 return;
             }
@@ -408,97 +510,178 @@
             fileName.textContent = `Selected: ${file.name}`;
             showProgress(true);
             updateProgress(20);
+            console.log('✅ File validation passed, starting FileReader...');
 
             const reader = new FileReader();
+            
+            reader.onerror = function(e) {
+                console.error('❌ FileReader error:', e);
+                showStatus('Error reading file. Please try again.', 'error');
+                showProgress(false);
+            };
+
             reader.onload = function(e) {
+                console.log('📖 FileReader completed, file size:', e.target.result.byteLength, 'bytes');
                 updateProgress(50);
                 
-                // Extract both HTML (with formatting) and raw text
-                const options = {
-                    convertImage: mammoth.images.imgElement(function(image) {
-                        return image.read("base64").then(function(imageBuffer) {
-                            return {
-                                src: "data:" + image.contentType + ";base64," + imageBuffer
-                            };
-                        });
-                    }),
-                    styleMap: [
-                        "p[style-name='Heading 1'] => h1:fresh",
-                        "p[style-name='Heading 2'] => h2:fresh",
-                        "p[style-name='Heading 3'] => h3:fresh",
-                        "p[style-name='Title'] => h1.title:fresh",
-                        "p[style-name='Subtitle'] => h2.subtitle:fresh",
-                        "r[style-name='Strong'] => strong",
-                        "r[style-name='Emphasis'] => em"
-                    ]
-                };
+                try {
+                    // Extract both HTML (with formatting) and raw text
+                    const options = {
+                        convertImage: mammoth.images.imgElement(function(image) {
+                            return image.read("base64").then(function(imageBuffer) {
+                                return {
+                                    src: "data:" + image.contentType + ";base64," + imageBuffer
+                                };
+                            });
+                        }),
+                        styleMap: [
+                            "p[style-name='Heading 1'] => h1:fresh",
+                            "p[style-name='Heading 2'] => h2:fresh",
+                            "p[style-name='Heading 3'] => h3:fresh",
+                            "p[style-name='Title'] => h1.title:fresh",
+                            "p[style-name='Subtitle'] => h2.subtitle:fresh",
+                            "r[style-name='Strong'] => strong",
+                            "r[style-name='Emphasis'] => em"
+                        ]
+                    };
 
-                Promise.all([
-                    mammoth.convertToHtml({arrayBuffer: e.target.result}, options),
-                    mammoth.extractRawText({arrayBuffer: e.target.result})
-                ]).then(function(results) {
-                    documentHTML = results[0].value;
-                    documentText = results[1].value;
+                    console.log('🔄 Starting Mammoth processing...');
                     
-                    // Parse document structure
-                    documentStructure = parseDocumentStructure(documentHTML);
+                    Promise.all([
+                        mammoth.convertToHtml({arrayBuffer: e.target.result}, options),
+                        mammoth.extractRawText({arrayBuffer: e.target.result})
+                    ]).then(function(results) {
+                        console.log('✅ Mammoth processing successful');
+                        console.log('📝 HTML result length:', results[0].value.length);
+                        console.log('📝 Text result length:', results[1].value.length);
+                        console.log('⚠️ Mammoth messages:', results[0].messages);
+
+                        documentHTML = results[0].value;
+                        documentText = results[1].value;
+                        
+                        console.log('🔍 Parsing document structure...');
+                        // Parse document structure
+                        documentStructure = parseDocumentStructure(documentHTML);
+                        console.log('📊 Document structure:', documentStructure.length, 'elements found');
+                        
+                        updateProgress(100);
+                        showStatus('Document loaded successfully with formatting!', 'success');
+                        setTimeout(() => showProgress(false), 1000);
+                        
+                        // Show a preview of detected formatting
+                        showFormattingPreview(documentStructure);
+                    })
+                    .catch(function(err) {
+                        console.error('❌ Mammoth processing error:', err);
+                        console.error('Error stack:', err.stack);
+                        showStatus('Error processing document: ' + err.message, 'error');
+                        showProgress(false);
+                        
+                        // Try fallback to just text extraction
+                        console.log('🔄 Trying fallback text extraction...');
+                        mammoth.extractRawText({arrayBuffer: e.target.result})
+                            .then(function(result) {
+                                console.log('✅ Fallback text extraction successful');
+                                documentText = result.value;
+                                documentHTML = `<p>${result.value.replace(/\n/g, '</p><p>')}</p>`;
+                                documentStructure = parseDocumentStructure(documentHTML);
+                                showStatus('Document loaded (text only - formatting may be limited)', 'success');
+                            })
+                            .catch(function(fallbackErr) {
+                                console.error('❌ Fallback also failed:', fallbackErr);
+                                showStatus('Unable to read document. Please try a different file.', 'error');
+                            });
+                    });
                     
-                    updateProgress(100);
-                    showStatus('Document loaded successfully with formatting!', 'success');
-                    setTimeout(() => showProgress(false), 1000);
-                    
-                    // Show a preview of detected formatting
-                    showFormattingPreview(documentStructure);
-                })
-                .catch(function(err) {
-                    showStatus('Error reading document: ' + err.message, 'error');
+                } catch (err) {
+                    console.error('❌ Unexpected error in handleFile:', err);
+                    showStatus('Unexpected error: ' + err.message, 'error');
                     showProgress(false);
-                });
+                }
             };
+            
+            console.log('🚀 Starting FileReader.readAsArrayBuffer...');
             reader.readAsArrayBuffer(file);
         }
 
         function parseDocumentStructure(html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const elements = doc.body.children;
-            const structure = [];
+            console.log('🔍 Parsing document structure from HTML...');
+            console.log('📄 HTML preview:', html.substring(0, 500) + (html.length > 500 ? '...' : ''));
             
-            for (let element of elements) {
-                const item = {
-                    tag: element.tagName.toLowerCase(),
-                    content: element.textContent.trim(),
-                    html: element.outerHTML,
-                    isHeading: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(element.tagName.toLowerCase()),
-                    isEmpty: element.textContent.trim() === ''
-                };
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const elements = doc.body.children;
+                const structure = [];
                 
-                if (!item.isEmpty) {
-                    structure.push(item);
+                console.log('📊 Found', elements.length, 'elements in document body');
+                
+                for (let element of elements) {
+                    const item = {
+                        tag: element.tagName.toLowerCase(),
+                        content: element.textContent.trim(),
+                        html: element.outerHTML,
+                        isHeading: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(element.tagName.toLowerCase()),
+                        isEmpty: element.textContent.trim() === ''
+                    };
+                    
+                    console.log('📝 Element:', {
+                        tag: item.tag,
+                        isHeading: item.isHeading,
+                        isEmpty: item.isEmpty,
+                        contentPreview: item.content.substring(0, 100)
+                    });
+                    
+                    if (!item.isEmpty) {
+                        structure.push(item);
+                    }
                 }
+                
+                console.log('✅ Document structure parsed:', structure.length, 'non-empty elements');
+                return structure;
+                
+            } catch (err) {
+                console.error('❌ Error parsing document structure:', err);
+                // Fallback: create simple structure from HTML
+                return [{
+                    tag: 'p',
+                    content: html.replace(/<[^>]*>/g, ''),
+                    html: html,
+                    isHeading: false,
+                    isEmpty: false
+                }];
             }
-            
-            return structure;
         }
 
         function showFormattingPreview(structure) {
-            const headings = structure.filter(item => item.isHeading);
-            if (headings.length > 0) {
-                const previewDiv = document.createElement('div');
-                previewDiv.style.cssText = `
-                    background: #e8f5e8; 
-                    padding: 15px; 
-                    border-radius: 8px; 
-                    margin: 15px 0; 
-                    border-left: 4px solid #28a745;
-                `;
-                previewDiv.innerHTML = `
-                    <strong>📋 Detected Document Structure:</strong><br>
-                    <small style="color: #666;">Found ${headings.length} headings that will be used for chapters/sections</small><br>
-                    ${headings.slice(0, 5).map(h => `• ${h.content}`).join('<br>')}
-                    ${headings.length > 5 ? '<br>• ... and more' : ''}
-                `;
-                fileName.appendChild(previewDiv);
+            console.log('🎨 Showing formatting preview...');
+            
+            try {
+                const headings = structure.filter(item => item.isHeading);
+                console.log('📋 Found headings:', headings.length);
+                
+                if (headings.length > 0) {
+                    const previewDiv = document.createElement('div');
+                    previewDiv.style.cssText = `
+                        background: #e8f5e8; 
+                        padding: 15px; 
+                        border-radius: 8px; 
+                        margin: 15px 0; 
+                        border-left: 4px solid #28a745;
+                    `;
+                    previewDiv.innerHTML = `
+                        <strong>📋 Detected Document Structure:</strong><br>
+                        <small style="color: #666;">Found ${headings.length} headings that will be used for chapters/sections</small><br>
+                        ${headings.slice(0, 5).map(h => `• ${h.content}`).join('<br>')}
+                        ${headings.length > 5 ? '<br>• ... and more' : ''}
+                    `;
+                    fileName.appendChild(previewDiv);
+                    console.log('✅ Formatting preview displayed');
+                } else {
+                    console.log('ℹ️ No headings found for preview');
+                }
+            } catch (err) {
+                console.error('❌ Error showing formatting preview:', err);
             }
         }
 
