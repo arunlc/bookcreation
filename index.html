@@ -1,279 +1,203 @@
 <script>
         // Global variables
-        let documentText = '';
-        let documentHTML = '';
-        let documentStructure = [];
-        let processedPages = [];
+        var documentText = '';
+        var documentHTML = '';
+        var documentStructure = [];
+        var processedPages = [];
 
-        // Initialize app when page loads
-        window.addEventListener('load', function() {
-            console.log('🚀 App loaded successfully');
+        // Initialize when page loads
+        window.onload = function() {
+            console.log('App loaded successfully');
             setupEventListeners();
-        });
+        };
 
         function setupEventListeners() {
-            // File upload handling
-            const uploadSection = document.getElementById('uploadSection');
-            const fileInput = document.getElementById('fileInput');
-            const fileName = document.getElementById('fileName');
+            var uploadSection = document.getElementById('uploadSection');
+            var fileInput = document.getElementById('fileInput');
 
-            uploadSection.addEventListener('dragover', (e) => {
+            uploadSection.addEventListener('dragover', function(e) {
                 e.preventDefault();
                 uploadSection.classList.add('dragover');
             });
 
-            uploadSection.addEventListener('dragleave', () => {
+            uploadSection.addEventListener('dragleave', function() {
                 uploadSection.classList.remove('dragover');
             });
 
-            uploadSection.addEventListener('drop', (e) => {
+            uploadSection.addEventListener('drop', function(e) {
                 e.preventDefault();
                 uploadSection.classList.remove('dragover');
-                const files = e.dataTransfer.files;
+                var files = e.dataTransfer.files;
                 if (files.length > 0) {
                     handleFile(files[0]);
                 }
             });
 
-            fileInput.addEventListener('change', (e) => {
+            fileInput.addEventListener('change', function(e) {
                 if (e.target.files.length > 0) {
                     handleFile(e.target.files[0]);
                 }
             });
         }
 
-        // Debug console functions
-        function addDebugConsole() {
-            const debugDiv = document.createElement('div');
-            debugDiv.id = 'debugConsole';
-            debugDiv.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                width: 450px;
-                max-height: 400px;
-                background: #1a1a1a;
-                color: #00ff00;
-                font-family: 'Courier New', monospace;
-                font-size: 12px;
-                padding: 15px;
-                border-radius: 12px;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-                overflow-y: auto;
-                z-index: 1000;
-                display: none;
-                border: 2px solid #333;
-            `;
-            debugDiv.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 8px;">
-                    <strong style="color: #ffffff; font-size: 14px;">🐛 Debug Console</strong>
-                    <button onclick="document.getElementById('debugConsole').style.display='none'" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ Close</button>
-                </div>
-                <div id="debugLog" style="max-height: 320px; overflow-y: auto;"></div>
-                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #333; font-size: 10px; color: #888;">
-                    💡 This shows real-time upload and processing logs
-                </div>
-            `;
-            document.body.appendChild(debugDiv);
-        }
-
         function showDebugConsole() {
-            const debugConsole = document.getElementById('debugConsole');
+            var debugConsole = document.getElementById('debugConsole');
             if (!debugConsole) {
                 addDebugConsole();
             }
             document.getElementById('debugConsole').style.display = 'block';
-            logToDebug('🐛 Debug console opened - ready to track upload process!', 'success');
+            logToDebug('Debug console opened - ready to track upload process!', 'success');
         }
 
-        function logToDebug(message, type = 'info') {
-            const debugLog = document.getElementById('debugLog');
+        function addDebugConsole() {
+            var debugDiv = document.createElement('div');
+            debugDiv.id = 'debugConsole';
+            debugDiv.style.cssText = 'position: fixed; bottom: 20px; right: 20px; width: 450px; max-height: 400px; background: #1a1a1a; color: #00ff00; font-family: monospace; font-size: 12px; padding: 15px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow-y: auto; z-index: 1000; display: none; border: 2px solid #333;';
+            
+            debugDiv.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 8px;"><strong style="color: #ffffff; font-size: 14px;">🐛 Debug Console</strong><button onclick="document.getElementById(\'debugConsole\').style.display=\'none\'" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ Close</button></div><div id="debugLog" style="max-height: 320px; overflow-y: auto;"></div><div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #333; font-size: 10px; color: #888;">💡 This shows real-time upload and processing logs</div>';
+            
+            document.body.appendChild(debugDiv);
+        }
+
+        function logToDebug(message, type) {
+            var debugLog = document.getElementById('debugLog');
             if (debugLog) {
-                const colors = {
+                var colors = {
                     info: '#00ff00',
                     warn: '#ffaa00', 
                     error: '#ff4444',
                     success: '#00aa00'
                 };
                 
-                const timestamp = new Date().toLocaleTimeString();
-                debugLog.innerHTML += `<div style="color: ${colors[type] || '#00ff00'}; margin-bottom: 3px;">[${timestamp}] ${message}</div>`;
+                var timestamp = new Date().toLocaleTimeString();
+                var color = colors[type] || '#00ff00';
+                debugLog.innerHTML += '<div style="color: ' + color + '; margin-bottom: 3px;">[' + timestamp + '] ' + message + '</div>';
                 debugLog.scrollTop = debugLog.scrollHeight;
             }
         }
 
-        // Override console methods to also log to debug panel
-        const originalConsoleLog = console.log;
-        const originalConsoleError = console.error;
-        const originalConsoleWarn = console.warn;
-
-        console.log = function(...args) {
-            originalConsoleLog.apply(console, args);
-            logToDebug(args.join(' '), 'info');
-        };
-
-        console.error = function(...args) {
-            originalConsoleError.apply(console, args);
-            logToDebug('ERROR: ' + args.join(' '), 'error');
-        };
-
-        console.warn = function(...args) {
-            originalConsoleWarn.apply(console, args);
-            logToDebug('WARN: ' + args.join(' '), 'warn');
-        };
-
         function handleFile(file) {
-            console.log('🔍 Starting file upload process...');
-            console.log('📄 File details:', {
-                name: file.name,
-                size: file.size,
-                type: file.type,
-                lastModified: new Date(file.lastModified).toISOString()
-            });
+            logToDebug('Starting file upload process...', 'info');
+            logToDebug('File: ' + file.name + ' (' + file.size + ' bytes)', 'info');
 
             if (!file.name.match(/\.(docx|doc)$/i)) {
-                console.error('❌ Invalid file type:', file.name);
+                logToDebug('Invalid file type: ' + file.name, 'error');
                 showStatus('Please select a Word document (.docx or .doc)', 'error');
                 return;
             }
 
-            const fileName = document.getElementById('fileName');
-            fileName.textContent = `Selected: ${file.name}`;
+            var fileName = document.getElementById('fileName');
+            fileName.textContent = 'Selected: ' + file.name;
             showProgress(true);
             updateProgress(20);
-            console.log('✅ File validation passed, starting FileReader...');
+            logToDebug('File validation passed, starting FileReader...', 'success');
 
-            const reader = new FileReader();
+            var reader = new FileReader();
             
             reader.onerror = function(e) {
-                console.error('❌ FileReader error:', e);
+                logToDebug('FileReader error: ' + e, 'error');
                 showStatus('Error reading file. Please try again.', 'error');
                 showProgress(false);
             };
 
             reader.onload = function(e) {
-                console.log('📖 FileReader completed, file size:', e.target.result.byteLength, 'bytes');
+                logToDebug('FileReader completed, file size: ' + e.target.result.byteLength + ' bytes', 'info');
                 updateProgress(50);
                 
                 try {
-                    // Extract both HTML (with formatting) and raw text
-                    const options = {
-                        convertImage: mammoth.images.imgElement(function(image) {
-                            return image.read("base64").then(function(imageBuffer) {
-                                return {
-                                    src: "data:" + image.contentType + ";base64," + imageBuffer
-                                };
-                            });
-                        }),
+                    var options = {
                         styleMap: [
                             "p[style-name='Heading 1'] => h1:fresh",
                             "p[style-name='Heading 2'] => h2:fresh",
-                            "p[style-name='Heading 3'] => h3:fresh",
-                            "p[style-name='Title'] => h1.title:fresh",
-                            "p[style-name='Subtitle'] => h2.subtitle:fresh",
-                            "r[style-name='Strong'] => strong",
-                            "r[style-name='Emphasis'] => em"
+                            "p[style-name='Heading 3'] => h3:fresh"
                         ]
                     };
 
-                    console.log('🔄 Starting Mammoth processing...');
+                    logToDebug('Starting Mammoth processing...', 'info');
                     
                     Promise.all([
                         mammoth.convertToHtml({arrayBuffer: e.target.result}, options),
                         mammoth.extractRawText({arrayBuffer: e.target.result})
                     ]).then(function(results) {
-                        console.log('✅ Mammoth processing successful');
-                        console.log('📝 HTML result length:', results[0].value.length);
-                        console.log('📝 Text result length:', results[1].value.length);
-                        console.log('⚠️ Mammoth messages:', results[0].messages);
+                        logToDebug('Mammoth processing successful', 'success');
+                        logToDebug('HTML result length: ' + results[0].value.length, 'info');
+                        logToDebug('Text result length: ' + results[1].value.length, 'info');
 
                         documentHTML = results[0].value;
                         documentText = results[1].value;
                         
-                        console.log('🔍 Parsing document structure...');
-                        // Parse document structure
+                        logToDebug('Parsing document structure...', 'info');
                         documentStructure = parseDocumentStructure(documentHTML);
-                        console.log('📊 Document structure:', documentStructure.length, 'elements found');
+                        logToDebug('Document structure: ' + documentStructure.length + ' elements found', 'success');
                         
                         updateProgress(100);
                         showStatus('Document loaded successfully with formatting!', 'success');
-                        setTimeout(() => showProgress(false), 1000);
+                        setTimeout(function() { showProgress(false); }, 1000);
                         
-                        // Show a preview of detected formatting
                         showFormattingPreview(documentStructure);
                     })
                     .catch(function(err) {
-                        console.error('❌ Mammoth processing error:', err);
-                        console.error('Error stack:', err.stack);
+                        logToDebug('Mammoth processing error: ' + err.message, 'error');
                         showStatus('Error processing document: ' + err.message, 'error');
                         showProgress(false);
                         
-                        // Try fallback to just text extraction
-                        console.log('🔄 Trying fallback text extraction...');
+                        logToDebug('Trying fallback text extraction...', 'warn');
                         mammoth.extractRawText({arrayBuffer: e.target.result})
                             .then(function(result) {
-                                console.log('✅ Fallback text extraction successful');
+                                logToDebug('Fallback text extraction successful', 'success');
                                 documentText = result.value;
-                                documentHTML = `<p>${result.value.replace(/\n/g, '</p><p>')}</p>`;
+                                documentHTML = '<p>' + result.value.replace(/\n/g, '</p><p>') + '</p>';
                                 documentStructure = parseDocumentStructure(documentHTML);
                                 showStatus('Document loaded (text only - formatting may be limited)', 'success');
                             })
                             .catch(function(fallbackErr) {
-                                console.error('❌ Fallback also failed:', fallbackErr);
+                                logToDebug('Fallback also failed: ' + fallbackErr.message, 'error');
                                 showStatus('Unable to read document. Please try a different file.', 'error');
                             });
                     });
                     
                 } catch (err) {
-                    console.error('❌ Unexpected error in handleFile:', err);
+                    logToDebug('Unexpected error in handleFile: ' + err.message, 'error');
                     showStatus('Unexpected error: ' + err.message, 'error');
                     showProgress(false);
                 }
             };
             
-            console.log('🚀 Starting FileReader.readAsArrayBuffer...');
+            logToDebug('Starting FileReader.readAsArrayBuffer...', 'info');
             reader.readAsArrayBuffer(file);
         }
 
         function parseDocumentStructure(html) {
-            console.log('🔍 Parsing document structure from HTML...');
-            console.log('📄 HTML preview:', html.substring(0, 500) + (html.length > 500 ? '...' : ''));
+            logToDebug('Parsing document structure from HTML...', 'info');
             
             try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const elements = doc.body.children;
-                const structure = [];
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                var elements = doc.body.children;
+                var structure = [];
                 
-                console.log('📊 Found', elements.length, 'elements in document body');
+                logToDebug('Found ' + elements.length + ' elements in document body', 'info');
                 
-                for (let element of elements) {
-                    const item = {
+                for (var i = 0; i < elements.length; i++) {
+                    var element = elements[i];
+                    var item = {
                         tag: element.tagName.toLowerCase(),
                         content: element.textContent.trim(),
                         html: element.outerHTML,
-                        isHeading: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(element.tagName.toLowerCase()),
+                        isHeading: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].indexOf(element.tagName.toLowerCase()) !== -1,
                         isEmpty: element.textContent.trim() === ''
                     };
-                    
-                    console.log('📝 Element:', {
-                        tag: item.tag,
-                        isHeading: item.isHeading,
-                        isEmpty: item.isEmpty,
-                        contentPreview: item.content.substring(0, 100)
-                    });
                     
                     if (!item.isEmpty) {
                         structure.push(item);
                     }
                 }
                 
-                console.log('✅ Document structure parsed:', structure.length, 'non-empty elements');
+                logToDebug('Document structure parsed: ' + structure.length + ' non-empty elements', 'success');
                 return structure;
                 
             } catch (err) {
-                console.error('❌ Error parsing document structure:', err);
-                // Fallback: create simple structure from HTML
+                logToDebug('Error parsing document structure: ' + err.message, 'error');
                 return [{
                     tag: 'p',
                     content: html.replace(/<[^>]*>/g, ''),
@@ -285,40 +209,33 @@
         }
 
         function showFormattingPreview(structure) {
-            console.log('🎨 Showing formatting preview...');
+            logToDebug('Showing formatting preview...', 'info');
             
             try {
-                const headings = structure.filter(item => item.isHeading);
-                console.log('📋 Found headings:', headings.length);
+                var headings = structure.filter(function(item) { return item.isHeading; });
+                logToDebug('Found headings: ' + headings.length, 'info');
                 
                 if (headings.length > 0) {
-                    const fileName = document.getElementById('fileName');
-                    const previewDiv = document.createElement('div');
-                    previewDiv.style.cssText = `
-                        background: #e8f5e8; 
-                        padding: 15px; 
-                        border-radius: 8px; 
-                        margin: 15px 0; 
-                        border-left: 4px solid #28a745;
-                    `;
-                    previewDiv.innerHTML = `
-                        <strong>📋 Detected Document Structure:</strong><br>
-                        <small style="color: #666;">Found ${headings.length} headings that will be used for chapters/sections</small><br>
-                        ${headings.slice(0, 5).map(h => `• ${h.content}`).join('<br>')}
-                        ${headings.length > 5 ? '<br>• ... and more' : ''}
-                    `;
+                    var fileName = document.getElementById('fileName');
+                    var previewDiv = document.createElement('div');
+                    previewDiv.style.cssText = 'background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #28a745;';
+                    
+                    var headingsList = headings.slice(0, 5).map(function(h) { return '• ' + h.content; }).join('<br>');
+                    var moreText = headings.length > 5 ? '<br>• ... and more' : '';
+                    
+                    previewDiv.innerHTML = '<strong>📋 Detected Document Structure:</strong><br><small style="color: #666;">Found ' + headings.length + ' headings that will be used for chapters/sections</small><br>' + headingsList + moreText;
                     fileName.appendChild(previewDiv);
-                    console.log('✅ Formatting preview displayed');
+                    logToDebug('Formatting preview displayed', 'success');
                 } else {
-                    console.log('ℹ️ No headings found for preview');
+                    logToDebug('No headings found for preview', 'info');
                 }
             } catch (err) {
-                console.error('❌ Error showing formatting preview:', err);
+                logToDebug('Error showing formatting preview: ' + err.message, 'error');
             }
         }
 
         function processDocument() {
-            console.log('🔄 Starting document processing...');
+            logToDebug('Starting document processing...', 'info');
             
             if (!documentHTML && !documentText) {
                 showStatus('Please upload a document first', 'error');
@@ -328,112 +245,39 @@
             showProgress(true);
             updateProgress(10);
 
-            const bookType = document.getElementById('bookType').value;
-            const bookSize = document.getElementById('bookSize').value;
-            const wordsPerPage = parseInt(document.getElementById('wordsPerPage').value);
-            const illustrationFreq = document.getElementById('illustrationFreq').value;
+            var bookType = document.getElementById('bookType').value;
+            var bookSize = document.getElementById('bookSize').value;
+            var wordsPerPage = parseInt(document.getElementById('wordsPerPage').value);
+            var illustrationFreq = document.getElementById('illustrationFreq').value;
 
-            console.log('📋 Processing settings:', { bookType, bookSize, wordsPerPage, illustrationFreq });
+            logToDebug('Processing with settings: ' + bookType + ', ' + bookSize + ', ' + wordsPerPage + ' words/page', 'info');
 
             updateProgress(30);
-
-            // Process the document based on settings with formatting preserved
             processedPages = createFormattedBookLayout(documentStructure, bookType, wordsPerPage, illustrationFreq);
             
             updateProgress(70);
-
-            // Render the results
             renderFormattedPages(processedPages);
             
             updateProgress(100);
             document.getElementById('resultsSection').style.display = 'block';
             document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
             
-            showStatus(`Successfully generated ${processedPages.length} pages with formatting!`, 'success');
-            setTimeout(() => showProgress(false), 1000);
+            showStatus('Successfully generated ' + processedPages.length + ' pages with formatting!', 'success');
+            setTimeout(function() { showProgress(false); }, 1000);
         }
 
         function createFormattedBookLayout(structure, bookType, wordsPerPage, illustrationFreq) {
-            const pages = [];
-            let currentPageContent = [];
-            let currentWordCount = 0;
-            let pageNumber = 1;
-            let chapterNumber = 1;
+            var pages = [];
+            var currentPageContent = [];
+            var currentWordCount = 0;
+            var pageNumber = 1;
 
-            if (bookType === 'chapter' || bookType === 'collection') {
-                // Group content by headings
-                let currentSection = [];
-                let sectionTitle = null;
-                
-                for (let item of structure) {
-                    if (item.isHeading) {
-                        // Process previous section
-                        if (currentSection.length > 0) {
-                            const sectionPages = createPagesFromSection(currentSection, sectionTitle, wordsPerPage, illustrationFreq, pageNumber);
-                            pages.push(...sectionPages);
-                            pageNumber += sectionPages.length;
-                        }
-                        
-                        // Start new section
-                        sectionTitle = item.content;
-                        currentSection = [];
-                        chapterNumber++;
-                    } else {
-                        currentSection.push(item);
-                    }
-                }
-                
-                // Process final section
-                if (currentSection.length > 0) {
-                    const sectionPages = createPagesFromSection(currentSection, sectionTitle, wordsPerPage, illustrationFreq, pageNumber);
-                    pages.push(...sectionPages);
-                }
-            } else {
-                // Process as continuous content
-                for (let item of structure) {
-                    const itemWordCount = item.content.split(/\s+/).length;
-                    
-                    // Check if adding this item would exceed word limit
-                    if (currentWordCount + itemWordCount > wordsPerPage && currentPageContent.length > 0) {
-                        // Create page with current content
-                        pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
-                        currentPageContent = [];
-                        currentWordCount = 0;
-                        pageNumber++;
-                    }
-                    
-                    currentPageContent.push(item);
-                    currentWordCount += itemWordCount;
-                    
-                    // For headings, consider starting a new page after
-                    if (item.isHeading && currentPageContent.length > 1) {
-                        pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
-                        currentPageContent = [];
-                        currentWordCount = 0;
-                        pageNumber++;
-                    }
-                }
-                
-                // Add remaining content
-                if (currentPageContent.length > 0) {
-                    pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
-                }
-            }
-
-            return pages;
-        }
-
-        function createPagesFromSection(sectionContent, title, wordsPerPage, illustrationFreq, startPageNumber) {
-            const pages = [];
-            let currentPageContent = [];
-            let currentWordCount = 0;
-            let pageNumber = startPageNumber;
-
-            for (let item of sectionContent) {
-                const itemWordCount = item.content.split(/\s+/).length;
+            for (var i = 0; i < structure.length; i++) {
+                var item = structure[i];
+                var itemWordCount = item.content.split(/\s+/).length;
                 
                 if (currentWordCount + itemWordCount > wordsPerPage && currentPageContent.length > 0) {
-                    pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber, pages.length === 0 ? title : null));
+                    pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
                     currentPageContent = [];
                     currentWordCount = 0;
                     pageNumber++;
@@ -444,25 +288,38 @@
             }
             
             if (currentPageContent.length > 0) {
-                pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber, pages.length === 0 ? title : null));
+                pages.push(createFormattedPage(pageNumber, currentPageContent, illustrationFreq, pageNumber));
             }
 
             return pages;
         }
 
-        function createFormattedPage(pageNum, contentItems, illustrationFreq, totalPage, title = null) {
-            const needsIllustration = shouldHaveIllustration(illustrationFreq, totalPage);
-            const totalWords = contentItems.reduce((sum, item) => sum + item.content.split(/\s+/).length, 0);
+        function createFormattedPage(pageNum, contentItems, illustrationFreq, totalPage, title) {
+            var needsIllustration = shouldHaveIllustration(illustrationFreq, totalPage);
+            var totalWords = 0;
+            for (var i = 0; i < contentItems.length; i++) {
+                totalWords += contentItems[i].content.split(/\s+/).length;
+            }
+            
+            var formattedHTML = '';
+            var plainText = '';
+            var hasHeadings = false;
+            
+            for (var i = 0; i < contentItems.length; i++) {
+                formattedHTML += contentItems[i].html;
+                plainText += contentItems[i].content + '\n\n';
+                if (contentItems[i].isHeading) hasHeadings = true;
+            }
             
             return {
                 number: pageNum,
                 contentItems: contentItems,
-                formattedHTML: contentItems.map(item => item.html).join(''),
-                plainText: contentItems.map(item => item.content).join('\n\n'),
+                formattedHTML: formattedHTML,
+                plainText: plainText,
                 hasIllustration: needsIllustration,
-                title: title,
+                title: title || null,
                 wordCount: totalWords,
-                hasHeadings: contentItems.some(item => item.isHeading)
+                hasHeadings: hasHeadings
             };
         }
 
@@ -477,238 +334,124 @@
         }
 
         function renderFormattedPages(pages) {
-            const container = document.getElementById('pagesContainer');
+            var container = document.getElementById('pagesContainer');
             container.innerHTML = '';
 
-            pages.forEach((page, index) => {
-                const pageDiv = document.createElement('div');
+            for (var i = 0; i < pages.length; i++) {
+                var page = pages[i];
+                var pageDiv = document.createElement('div');
                 pageDiv.className = 'page';
 
-                const headerDiv = document.createElement('div');
+                var headerDiv = document.createElement('div');
                 headerDiv.className = 'page-header';
-                headerDiv.innerHTML = `
-                    <span>
-                        ${page.title || `Page ${page.number}`} 
-                        (${page.wordCount} words)
-                        ${page.hasHeadings ? ' • Contains Headings' : ''}
-                    </span>
-                    <div>
-                        <button class="copy-button" onclick="copyFormattedPage(${index}, 'formatted')" style="margin-right: 5px;">Copy HTML</button>
-                        <button class="copy-button" onclick="copyFormattedPage(${index}, 'plain')">Copy Text</button>
-                    </div>
-                `;
+                headerDiv.innerHTML = '<span>' + (page.title || 'Page ' + page.number) + ' (' + page.wordCount + ' words)' + (page.hasHeadings ? ' • Contains Headings' : '') + '</span><div><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'plain\')">Copy Text</button></div>';
 
-                const contentDiv = document.createElement('div');
+                var contentDiv = document.createElement('div');
                 contentDiv.className = 'page-content';
                 if (page.hasIllustration) {
                     contentDiv.classList.add('illustration-space');
                 }
 
-                let pageContent = '';
-                
+                var pageContent = '';
                 if (page.hasIllustration) {
-                    pageContent += `
-                        <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
-                            <strong>🎨 Illustration Space</strong><br>
-                            <small>This page should include an illustration based on the content below.</small>
-                        </div>
-                    `;
+                    pageContent += '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;"><strong>🎨 Illustration Space</strong><br><small>This page should include an illustration based on the content below.</small></div>';
                 }
 
-                // Add formatted content with proper styling
-                pageContent += `
-                    <div class="formatted-content" style="
-                        font-family: Georgia, serif;
-                        line-height: 1.6;
-                        color: #333;
-                    ">
-                        ${page.formattedHTML}
-                    </div>
-                `;
-
+                pageContent += '<div class="formatted-content" style="font-family: Georgia, serif; line-height: 1.6; color: #333;">' + page.formattedHTML + '</div>';
                 contentDiv.innerHTML = pageContent;
-                
-                // Apply additional styling to the formatted content
-                const formattedDiv = contentDiv.querySelector('.formatted-content');
-                if (formattedDiv) {
-                    // Style headings
-                    const headings = formattedDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                    headings.forEach(heading => {
-                        heading.style.cssText = `
-                            color: #2c3e50;
-                            margin: 20px 0 15px 0;
-                            font-weight: bold;
-                            border-bottom: 2px solid #3498db;
-                            padding-bottom: 5px;
-                        `;
-                    });
-
-                    // Style paragraphs
-                    const paragraphs = formattedDiv.querySelectorAll('p');
-                    paragraphs.forEach(p => {
-                        p.style.cssText = `
-                            margin: 12px 0;
-                            text-align: justify;
-                        `;
-                    });
-
-                    // Style emphasis
-                    const emphasis = formattedDiv.querySelectorAll('em, i');
-                    emphasis.forEach(em => {
-                        em.style.cssText = `
-                            font-style: italic;
-                            color: #7f8c8d;
-                        `;
-                    });
-
-                    // Style strong text
-                    const strong = formattedDiv.querySelectorAll('strong, b');
-                    strong.forEach(s => {
-                        s.style.cssText = `
-                            font-weight: bold;
-                            color: #2c3e50;
-                        `;
-                    });
-
-                    // Handle images
-                    const images = formattedDiv.querySelectorAll('img');
-                    images.forEach(img => {
-                        img.style.cssText = `
-                            max-width: 100%;
-                            height: auto;
-                            border-radius: 8px;
-                            margin: 15px 0;
-                            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                        `;
-                    });
-                }
 
                 pageDiv.appendChild(headerDiv);
                 pageDiv.appendChild(contentDiv);
                 container.appendChild(pageDiv);
-            });
+            }
         }
 
         function copyFormattedPage(index, format) {
-            const page = processedPages[index];
-            let textToCopy = '';
+            var page = processedPages[index];
+            var textToCopy = '';
             
             if (format === 'formatted') {
-                // Copy HTML with Canva-friendly formatting
                 textToCopy = convertToCanvaFormat(page);
             } else {
-                // Copy plain text
                 textToCopy = page.plainText;
-                
                 if (page.hasIllustration) {
-                    textToCopy = `[ILLUSTRATION SPACE]\n\n${textToCopy}`;
+                    textToCopy = '[ILLUSTRATION SPACE]\n\n' + textToCopy;
                 }
-                
                 if (page.title) {
-                    textToCopy = `${page.title}\n\n${textToCopy}`;
+                    textToCopy = page.title + '\n\n' + textToCopy;
                 }
             }
 
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                showStatus(`Page copied to clipboard (${format} format)!`, 'success');
+            navigator.clipboard.writeText(textToCopy).then(function() {
+                showStatus('Page copied to clipboard (' + format + ' format)!', 'success');
             });
         }
 
         function convertToCanvaFormat(page) {
-            let canvaText = '';
+            var canvaText = '';
             
             if (page.title) {
-                canvaText += `**${page.title}**\n\n`;
+                canvaText += '**' + page.title + '**\n\n';
             }
             
             if (page.hasIllustration) {
-                canvaText += `[ADD ILLUSTRATION HERE]\n\n`;
+                canvaText += '[ADD ILLUSTRATION HERE]\n\n';
             }
             
-            // Convert HTML to Canva-friendly markdown-style formatting
-            page.contentItems.forEach(item => {
+            for (var i = 0; i < page.contentItems.length; i++) {
+                var item = page.contentItems[i];
                 if (item.isHeading) {
-                    canvaText += `**${item.content}**\n\n`;
+                    canvaText += '**' + item.content + '**\n\n';
                 } else {
-                    // Convert HTML to simpler formatting
-                    let content = item.html;
-                    
-                    // Convert strong/bold
+                    var content = item.html;
                     content = content.replace(/<(strong|b)>(.*?)<\/(strong|b)>/gi, '**$2**');
-                    
-                    // Convert emphasis/italic
                     content = content.replace(/<(em|i)>(.*?)<\/(em|i)>/gi, '*$2*');
-                    
-                    // Remove HTML tags but keep content
                     content = content.replace(/<[^>]*>/g, '');
-                    
-                    // Clean up extra whitespace
                     content = content.replace(/\s+/g, ' ').trim();
                     
                     if (content) {
-                        canvaText += `${content}\n\n`;
+                        canvaText += content + '\n\n';
                     }
                 }
-            });
+            }
             
             return canvaText;
         }
 
         function copyAllPages() {
-            let allText = '';
-            let allHTML = '';
-            
-            processedPages.forEach((page, index) => {
-                // Plain text version
-                if (page.title) {
-                    allText += `${page.title}\n\n`;
-                }
-                if (page.hasIllustration) {
-                    allText += `[ILLUSTRATION SPACE]\n\n`;
-                }
-                allText += `${page.plainText}\n\n---\n\n`;
-                
-                // HTML version
-                allHTML += convertToCanvaFormat(page) + '\n---\n\n';
-            });
-
-            // Copy the Canva-formatted version by default
-            navigator.clipboard.writeText(allHTML).then(() => {
+            var allHTML = '';
+            for (var i = 0; i < processedPages.length; i++) {
+                allHTML += convertToCanvaFormat(processedPages[i]) + '\n---\n\n';
+            }
+            navigator.clipboard.writeText(allHTML).then(function() {
                 showStatus('All pages copied to clipboard (Canva format)!', 'success');
             });
         }
 
         function exportToText() {
-            let content = `Book Layout Export\n`;
-            content += `Generated: ${new Date().toLocaleDateString()}\n`;
-            content += `Total Pages: ${processedPages.length}\n\n`;
-            content += `${'='.repeat(50)}\n\n`;
+            var content = 'Book Layout Export\nGenerated: ' + new Date().toLocaleDateString() + '\nTotal Pages: ' + processedPages.length + '\n\n';
+            content += '==================================================\n\n';
 
-            processedPages.forEach((page, index) => {
+            for (var i = 0; i < processedPages.length; i++) {
+                var page = processedPages[i];
                 if (page.title) {
-                    content += `${page.title}\n`;
-                    content += `${'-'.repeat(page.title.length)}\n\n`;
+                    content += page.title + '\n' + '-'.repeat(page.title.length) + '\n\n';
                 }
-                
                 if (page.hasIllustration) {
-                    content += `[ILLUSTRATION SPACE - Add visual content here]\n\n`;
+                    content += '[ILLUSTRATION SPACE - Add visual content here]\n\n';
                 }
-                
-                // Include formatting information
                 if (page.hasHeadings) {
-                    content += `[Contains formatted headings and styled text]\n\n`;
+                    content += '[Contains formatted headings and styled text]\n\n';
                 }
-                
-                content += `${page.plainText}\n\n`;
-                
-                if (index < processedPages.length - 1) {
-                    content += `${'='.repeat(50)}\n\n`;
+                content += page.plainText + '\n\n';
+                if (i < processedPages.length - 1) {
+                    content += '==================================================\n\n';
                 }
-            });
+            }
 
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            var blob = new Blob([content], { type: 'text/plain' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
             a.href = url;
             a.download = 'book-layout-formatted.txt';
             a.click();
@@ -716,60 +459,53 @@
         }
 
         function generateCanvaInstructions() {
-            let instructions = `Canva Book Layout Instructions with Formatting\n`;
-            instructions += `${'='.repeat(50)}\n\n`;
-            instructions += `Book Details:\n`;
-            instructions += `- Total Pages: ${processedPages.length}\n`;
-            instructions += `- Book Type: ${document.getElementById('bookType').value}\n`;
-            instructions += `- Book Size: ${document.getElementById('bookSize').value}\n`;
-            instructions += `- Words per Page: ${document.getElementById('wordsPerPage').value}\n`;
-            instructions += `- Contains Formatting: YES (headings, bold, italic)\n\n`;
+            var instructions = 'Canva Book Layout Instructions with Formatting\n';
+            instructions += '==================================================\n\n';
+            instructions += 'Book Details:\n';
+            instructions += '- Total Pages: ' + processedPages.length + '\n';
+            instructions += '- Book Type: ' + document.getElementById('bookType').value + '\n';
+            instructions += '- Book Size: ' + document.getElementById('bookSize').value + '\n';
+            instructions += '- Words per Page: ' + document.getElementById('wordsPerPage').value + '\n';
+            instructions += '- Contains Formatting: YES (headings, bold, italic)\n\n';
             
-            instructions += `Formatting Guide for Canva:\n`;
-            instructions += `- **Text** = Bold formatting in Canva\n`;
-            instructions += `- *Text* = Italic formatting in Canva\n`;  
-            instructions += `- Headings are marked with ** and should be larger font size\n`;
-            instructions += `- Maintain paragraph breaks as shown\n`;
-            instructions += `- Use consistent fonts throughout\n\n`;
-            
-            instructions += `Steps for Canva:\n`;
-            instructions += `1. Create a new design with your chosen book dimensions\n`;
-            instructions += `2. For each page below, create a new page in Canva\n`;
-            instructions += `3. Copy the formatted text content into text boxes\n`;
-            instructions += `4. Apply formatting: ** for bold, * for italic\n`;
-            instructions += `5. Make headings larger and more prominent\n`;
-            instructions += `6. Add illustrations where marked\n`;
-            instructions += `7. Ensure consistent spacing and alignment\n\n`;
-            
-            instructions += `Page-by-Page Content with Formatting:\n`;
-            instructions += `${'='.repeat(50)}\n\n`;
+            instructions += 'Formatting Guide for Canva:\n';
+            instructions += '- **Text** = Bold formatting in Canva\n';
+            instructions += '- *Text* = Italic formatting in Canva\n';  
+            instructions += '- Headings are marked with ** and should be larger font size\n';
+            instructions += '- Maintain paragraph breaks as shown\n';
+            instructions += '- Use consistent fonts throughout\n\n';
 
-            processedPages.forEach((page, index) => {
-                instructions += `PAGE ${index + 1}:\n`;
-                if (page.title) {
-                    instructions += `Title: ${page.title}\n`;
-                }
-                if (page.hasIllustration) {
-                    instructions += `⚠️  ADD ILLUSTRATION HERE\n`;
-                }
-                if (page.hasHeadings) {
-                    instructions += `📝 Contains formatted headings\n`;
-                }
-                instructions += `\nFormatted Content:\n`;
-                instructions += `${convertToCanvaFormat(page)}\n`;
-                instructions += `${'-'.repeat(40)}\n\n`;
-            });
-
-            const blob = new Blob([instructions], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            var blob = new Blob([instructions], { type: 'text/plain' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
             a.href = url;
             a.download = 'canva-instructions-formatted.txt';
             a.click();
             URL.revokeObjectURL(url);
         }
 
-        function showProgress(show) {<!DOCTYPE html>
+        function showProgress(show) {
+            document.getElementById('progressBar').style.display = show ? 'block' : 'none';
+            if (!show) {
+                updateProgress(0);
+            }
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+        }
+
+        function showStatus(message, type) {
+            var statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status-message status-' + type;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(function() {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+    </script>show) {<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
