@@ -33,6 +33,28 @@
             padding: 30px;
             text-align: center;
             color: white;
+            position: relative;
+        }
+
+        .debug-button {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.4);
+            padding: 8px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .debug-button:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.05);
         }
 
         .header h1 {
@@ -284,6 +306,7 @@
 <body>
     <div class="container">
         <div class="header">
+            <button class="debug-button" onclick="showDebugConsole()">🐛 Debug Console</button>
             <h1>📚 Story to Canva Layout Generator</h1>
             <p>Transform your stories into perfectly formatted book layouts for children's publishing</p>
         </div>
@@ -373,25 +396,29 @@
                 position: fixed;
                 bottom: 20px;
                 right: 20px;
-                width: 400px;
-                max-height: 300px;
+                width: 450px;
+                max-height: 400px;
                 background: #1a1a1a;
                 color: #00ff00;
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
                 padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                border-radius: 12px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.4);
                 overflow-y: auto;
                 z-index: 1000;
                 display: none;
+                border: 2px solid #333;
             `;
             debugDiv.innerHTML = `
-                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">
-                    <strong style="color: #ffffff;">🐛 Debug Console</strong>
-                    <button onclick="document.getElementById('debugConsole').style.display='none'" style="background: #ff4444; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px;">✕</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 8px;">
+                    <strong style="color: #ffffff; font-size: 14px;">🐛 Debug Console</strong>
+                    <button onclick="document.getElementById('debugConsole').style.display='none'" style="background: #ff4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ Close</button>
                 </div>
-                <div id="debugLog"></div>
+                <div id="debugLog" style="max-height: 320px; overflow-y: auto;"></div>
+                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #333; font-size: 10px; color: #888;">
+                    💡 This shows real-time upload and processing logs
+                </div>
             `;
             document.body.appendChild(debugDiv);
         }
@@ -402,6 +429,7 @@
                 addDebugConsole();
             }
             document.getElementById('debugConsole').style.display = 'block';
+            logToDebug('🐛 Debug console opened - ready to track upload process!', 'success');
         }
 
         function logToDebug(message, type = 'info') {
