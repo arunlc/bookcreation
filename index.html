@@ -186,6 +186,7 @@
             margin-bottom: 20px;
             overflow: hidden;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            position: relative;
         }
 
         .page-header {
@@ -208,6 +209,67 @@
         .page-content.illustration-space {
             background: linear-gradient(45deg, #f0f2ff, #fff5f5);
             border-left: 5px solid #ff6b6b;
+        }
+
+        .editable-content {
+            min-height: 100px;
+            padding: 10px;
+            border: 2px dashed transparent;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .editable-content:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .editable-content:focus {
+            border-color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.05);
+            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+        }
+
+        .word-counter {
+            font-size: 0.9em;
+            margin-top: 5px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .word-counter.optimal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .word-counter.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .word-counter.overflow {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .flow-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8em;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .flow-indicator.active {
+            opacity: 1;
         }
 
         .copy-button {
