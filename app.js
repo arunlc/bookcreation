@@ -3,6 +3,8 @@ var documentText = '';
 var documentHTML = '';
 var documentStructure = [];
 var processedPages = [];
+var targetWordsPerPage = 50;
+var isReflowing = false;
 
 // Initialize when page loads
 window.onload = function() {
@@ -221,7 +223,6 @@ function showFormattingPreview(structure) {
     }
 }
 
-// Document processing
 function processDocument() {
     logToDebug('Starting document processing...', 'info');
     
@@ -237,6 +238,8 @@ function processDocument() {
     var bookSize = document.getElementById('bookSize').value;
     var wordsPerPage = parseInt(document.getElementById('wordsPerPage').value);
     var illustrationFreq = document.getElementById('illustrationFreq').value;
+
+    targetWordsPerPage = wordsPerPage; // Store for text flow calculations
 
     logToDebug('Processing with settings: ' + bookType + ', ' + bookSize + ', ' + wordsPerPage + ' words/page', 'info');
 
@@ -376,7 +379,9 @@ function createFormattedPage(pageNum, contentItems, illustrationFreq, totalPage,
         hasIllustration: needsIllustration,
         title: title || null,
         wordCount: totalWords,
-        hasHeadings: hasHeadings
+        hasHeadings: hasHeadings,
+        isChapterStart: title !== null,
+        chapterTitle: title
     };
 }
 
@@ -390,7 +395,7 @@ function shouldHaveIllustration(freq, pageNum) {
     }
 }
 
-// Page rendering
+// Page rendering with editable content
 function renderFormattedPages(pages) {
     var container = document.getElementById('pagesContainer');
     container.innerHTML = '';
@@ -399,10 +404,19 @@ function renderFormattedPages(pages) {
         var page = pages[i];
         var pageDiv = document.createElement('div');
         pageDiv.className = 'page';
+        pageDiv.setAttribute('data-page-index', i);
 
         var headerDiv = document.createElement('div');
         headerDiv.className = 'page-header';
-        headerDiv.innerHTML = '<span>' + (page.title || 'Page ' + page.number) + ' (' + page.wordCount + ' words)' + (page.hasHeadings ? ' • Contains Headings' : '') + '</span><div><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'plain\')">Copy Text</button></div>';
+        
+        var wordCountClass = getWordCountClass(page.wordCount);
+        var wordCountHtml = '<span class="word-counter ' + wordCountClass + '">' + page.wordCount + ' / ' + targetWordsPerPage + ' words</span>';
+        
+        headerDiv.innerHTML = '<span>' + (page.title || 'Page ' + page.number) + ' ' + wordCountHtml + (page.hasHeadings ? ' • Contains Headings' : '') + '</span><div><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'plain\')">Copy Text</button></div>';
+
+        var flowIndicator = document.createElement('div');
+        flowIndicator.className = 'flow-indicator';
+        flowIndicator.textContent = 'Flowing...';
 
         var contentDiv = document.createElement('div');
         contentDiv.className = 'page-content';
@@ -415,13 +429,203 @@ function renderFormattedPages(pages) {
             pageContent += '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;"><strong>🎨 Illustration Space</strong><br><small>This page should include an illustration based on the content below.</small></div>';
         }
 
-        pageContent += '<div class="formatted-content" style="font-family: Georgia, serif; line-height: 1.6; color: #333;">' + page.formattedHTML + '</div>';
-        contentDiv.innerHTML = pageContent;
+        // Create editable content area
+        var editableDiv = document.createElement('div');
+        editableDiv.className = 'editable-content';
+        editableDiv.contentEditable = true;
+        editableDiv.setAttribute('data-page-index', i);
+        editableDiv.innerHTML = page.formattedHTML;
+        
+        // Add input event listener for real-time text flow
+        editableDiv.addEventListener('input', function(e) {
+            handleTextInput(e);
+        });
 
+        contentDiv.appendChild(editableDiv);
+        
+        pageDiv.appendChild(flowIndicator);
         pageDiv.appendChild(headerDiv);
         pageDiv.appendChild(contentDiv);
         container.appendChild(pageDiv);
     }
+}
+
+function getWordCountClass(wordCount) {
+    var min = targetWordsPerPage - 5;  // 45 for target 50
+    var max = targetWordsPerPage + 5;  // 55 for target 50
+    var overflow = targetWordsPerPage + 10; // 60 for target 50
+    
+    if (wordCount >= min && wordCount <= max) {
+        return 'optimal';
+    } else if (wordCount <= overflow) {
+        return 'warning';
+    } else {
+        return 'overflow';
+    }
+}
+
+function handleTextInput(event) {
+    if (isReflowing) return; // Prevent recursive calls
+    
+    var editableDiv = event.target;
+    var pageIndex = parseInt(editableDiv.getAttribute('data-page-index'));
+    
+    // Update the page content in our data structure
+    var newContent = editableDiv.textContent || editableDiv.innerText;
+    processedPages[pageIndex].plainText = newContent;
+    processedPages[pageIndex].wordCount = countWords(newContent);
+    
+    // Update word counter display
+    updateWordCounter(pageIndex);
+    
+    // Check if text flow is needed
+    if (processedPages[pageIndex].wordCount > targetWordsPerPage + 10) { // 60+ words
+        setTimeout(function() {
+            reflowText(pageIndex);
+        }, 500); // Small delay to avoid excessive calls while typing
+    }
+}
+
+function countWords(text) {
+    return text.split(/\s+/).filter(function(word) { return word.length > 0; }).length;
+}
+
+function updateWordCounter(pageIndex) {
+    var page = processedPages[pageIndex];
+    var headerDiv = document.querySelector('[data-page-index="' + pageIndex + '"] .page-header');
+    var wordCountClass = getWordCountClass(page.wordCount);
+    var wordCountHtml = '<span class="word-counter ' + wordCountClass + '">' + page.wordCount + ' / ' + targetWordsPerPage + ' words</span>';
+    
+    // Update the header with new word count
+    var titleText = page.title || 'Page ' + page.number;
+    var headingsText = page.hasHeadings ? ' • Contains Headings' : '';
+    var buttonsHtml = '<div><button class="copy-button" onclick="copyFormattedPage(' + pageIndex + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button><button class="copy-button" onclick="copyFormattedPage(' + pageIndex + ', \'plain\')">Copy Text</button></div>';
+    
+    headerDiv.innerHTML = '<span>' + titleText + ' ' + wordCountHtml + headingsText + '</span>' + buttonsHtml;
+}
+
+function reflowText(fromPageIndex) {
+    if (isReflowing) return;
+    isReflowing = true;
+    
+    logToDebug('Starting text reflow from page ' + (fromPageIndex + 1), 'info');
+    
+    // Show flow indicator
+    var flowIndicator = document.querySelector('[data-page-index="' + fromPageIndex + '"] .flow-indicator');
+    if (flowIndicator) {
+        flowIndicator.classList.add('active');
+    }
+    
+    var currentPage = processedPages[fromPageIndex];
+    var words = currentPage.plainText.split(/\s+/).filter(function(word) { return word.length > 0; });
+    
+    if (words.length <= targetWordsPerPage + 10) {
+        isReflowing = false;
+        if (flowIndicator) flowIndicator.classList.remove('active');
+        return;
+    }
+    
+    // Find a good break point (end of sentence near the target)
+    var keepWords = findBreakPoint(words, targetWordsPerPage);
+    var overflowWords = words.slice(keepWords);
+    
+    // Update current page
+    currentPage.plainText = words.slice(0, keepWords).join(' ');
+    currentPage.wordCount = keepWords;
+    
+    // Update the editable content
+    var editableDiv = document.querySelector('[data-page-index="' + fromPageIndex + '"] .editable-content');
+    if (editableDiv) {
+        editableDiv.textContent = currentPage.plainText;
+    }
+    
+    // Handle overflow text
+    var nextPageIndex = fromPageIndex + 1;
+    
+    // Check if next page is a chapter start (don't flow across chapters)
+    if (nextPageIndex < processedPages.length && processedPages[nextPageIndex].isChapterStart) {
+        logToDebug('Stopped reflow at chapter boundary', 'warn');
+        isReflowing = false;
+        if (flowIndicator) flowIndicator.classList.remove('active');
+        return;
+    }
+    
+    // Flow to next page or create new page
+    if (nextPageIndex < processedPages.length) {
+        // Add overflow to existing next page
+        var nextPage = processedPages[nextPageIndex];
+        var combinedText = overflowWords.join(' ') + ' ' + nextPage.plainText;
+        nextPage.plainText = combinedText;
+        nextPage.wordCount = countWords(combinedText);
+        
+        // Update next page display
+        var nextEditableDiv = document.querySelector('[data-page-index="' + nextPageIndex + '"] .editable-content');
+        if (nextEditableDiv) {
+            nextEditableDiv.textContent = nextPage.plainText;
+        }
+        
+        // Continue flowing if next page is also too long
+        if (nextPage.wordCount > targetWordsPerPage + 10) {
+            setTimeout(function() {
+                reflowText(nextPageIndex);
+            }, 100);
+        }
+    } else {
+        // Create new page for overflow
+        var newPage = createNewPage(overflowWords.join(' '), fromPageIndex + 1);
+        processedPages.push(newPage);
+        
+        // Re-render to show new page
+        setTimeout(function() {
+            renderFormattedPages(processedPages);
+            isReflowing = false;
+        }, 100);
+        return;
+    }
+    
+    // Update word counters
+    updateWordCounter(fromPageIndex);
+    updateWordCounter(nextPageIndex);
+    
+    // Hide flow indicator
+    setTimeout(function() {
+        if (flowIndicator) flowIndicator.classList.remove('active');
+        isReflowing = false;
+    }, 500);
+}
+
+function findBreakPoint(words, targetCount) {
+    // Try to find a sentence ending near the target
+    for (var i = Math.max(1, targetCount - 10); i <= Math.min(words.length - 1, targetCount + 5); i++) {
+        if (words[i - 1].endsWith('.') || words[i - 1].endsWith('!') || words[i - 1].endsWith('?')) {
+            return i;
+        }
+    }
+    
+    // If no sentence break found, use target count
+    return Math.min(targetCount, words.length);
+}
+
+function createNewPage(content, afterPageIndex) {
+    var pageNumber = processedPages.length + 1;
+    return {
+        number: pageNumber,
+        contentItems: [{
+            tag: 'p',
+            content: content,
+            html: '<p>' + content + '</p>',
+            isHeading: false,
+            isEmpty: false
+        }],
+        formattedHTML: '<p>' + content + '</p>',
+        plainText: content,
+        hasIllustration: false,
+        title: null,
+        wordCount: countWords(content),
+        hasHeadings: false,
+        isChapterStart: false,
+        chapterTitle: null
+    };
 }
 
 // Copy and export functions
