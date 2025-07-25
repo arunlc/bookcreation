@@ -5,6 +5,7 @@ var documentStructure = [];
 var processedPages = [];
 var targetWordsPerPage = 50;
 var isReflowing = false;
+var currentBookSize = 'standard';
 
 // Initialize when page loads
 window.onload = function() {
@@ -240,6 +241,7 @@ function processDocument() {
     var illustrationFreq = document.getElementById('illustrationFreq').value;
 
     targetWordsPerPage = wordsPerPage; // Store for text flow calculations
+    currentBookSize = bookSize; // Store for print layout
 
     logToDebug('Processing with settings: ' + bookType + ', ' + bookSize + ', ' + wordsPerPage + ' words/page', 'info');
 
@@ -403,7 +405,7 @@ function renderFormattedPages(pages) {
     for (var i = 0; i < pages.length; i++) {
         var page = pages[i];
         var pageDiv = document.createElement('div');
-        pageDiv.className = 'page';
+        pageDiv.className = 'page size-' + currentBookSize;
         pageDiv.setAttribute('data-page-index', i);
 
         var headerDiv = document.createElement('div');
@@ -412,7 +414,15 @@ function renderFormattedPages(pages) {
         var wordCountClass = getWordCountClass(page.wordCount);
         var wordCountHtml = '<span class="word-counter ' + wordCountClass + '">' + page.wordCount + ' / ' + targetWordsPerPage + ' words</span>';
         
-        headerDiv.innerHTML = '<span>' + (page.title || 'Page ' + page.number) + ' ' + wordCountHtml + (page.hasHeadings ? ' • Contains Headings' : '') + '</span><div><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button><button class="copy-button" onclick="copyFormattedPage(' + i + ', \'plain\')">Copy Text</button></div>';
+        // Add page management buttons
+        var pageManagementHtml = '<div style="display: flex; gap: 5px; align-items: center;">' +
+            '<button class="copy-button" onclick="copyFormattedPage(' + i + ', \'formatted\')" style="margin-right: 5px;">Copy HTML</button>' +
+            '<button class="copy-button" onclick="copyFormattedPage(' + i + ', \'plain\')" style="margin-right: 5px;">Copy Text</button>' +
+            '<button class="copy-button" onclick="addBlankPage(' + i + ')" style="background: #ffc107; margin-right: 5px;">+ Blank</button>' +
+            (processedPages.length > 1 ? '<button class="copy-button" onclick="deletePage(' + i + ')" style="background: #dc3545;">Delete</button>' : '') +
+            '</div>';
+        
+        headerDiv.innerHTML = '<span>' + (page.title || 'Page ' + page.number) + ' ' + wordCountHtml + (page.hasHeadings ? ' • Contains Headings' : '') + '</span>' + pageManagementHtml;
 
         var flowIndicator = document.createElement('div');
         flowIndicator.className = 'flow-indicator';
@@ -425,23 +435,34 @@ function renderFormattedPages(pages) {
         }
 
         var pageContent = '';
-        if (page.hasIllustration) {
+        if (page.hasIllustration || page.isBlank) {
             pageContent += '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;"><strong>🎨 Illustration Space</strong><br><small>This page should include an illustration based on the content below.</small></div>';
         }
 
         // Create editable content area
-        var editableDiv = document.createElement('div');
-        editableDiv.className = 'editable-content';
-        editableDiv.contentEditable = true;
-        editableDiv.setAttribute('data-page-index', i);
-        editableDiv.innerHTML = page.formattedHTML;
-        
-        // Add input event listener for real-time text flow
-        editableDiv.addEventListener('input', function(e) {
-            handleTextInput(e);
-        });
+        if (!page.isBlank) {
+            var editableDiv = document.createElement('div');
+            editableDiv.className = 'editable-content';
+            editableDiv.contentEditable = true;
+            editableDiv.setAttribute('data-page-index', i);
+            editableDiv.innerHTML = page.formattedHTML || page.plainText;
+            
+            // Add input event listener for real-time text flow
+            editableDiv.addEventListener('input', function(e) {
+                handleTextInput(e);
+            });
 
-        contentDiv.appendChild(editableDiv);
+            contentDiv.appendChild(editableDiv);
+        } else {
+            // Blank page content
+            var blankDiv = document.createElement('div');
+            blankDiv.className = 'editable-content';
+            blankDiv.style.textAlign = 'center';
+            blankDiv.style.color = '#999';
+            blankDiv.style.fontStyle = 'italic';
+            blankDiv.innerHTML = '<p>This is a blank page reserved for full-page illustration</p>';
+            contentDiv.appendChild(blankDiv);
+        }
         
         pageDiv.appendChild(flowIndicator);
         pageDiv.appendChild(headerDiv);
@@ -807,4 +828,140 @@ function showStatus(message, type) {
     setTimeout(function() {
         statusDiv.style.display = 'none';
     }, 5000);
+}
+
+// Print functionality
+function showPrintSettings() {
+    document.getElementById('printSettings').style.display = 'block';
+    document.getElementById('pagesContainer').style.display = 'none';
+    updatePrintPreview();
+}
+
+function hidePrintSettings() {
+    document.getElementById('printSettings').style.display = 'none';
+    document.getElementById('pagesContainer').style.display = 'block';
+}
+
+function updatePrintPreview() {
+    var fontSize = document.getElementById('printFontSize').value;
+    var margins = document.getElementById('printMargins').value;
+    var pageNumbers = document.getElementById('pageNumbers').value;
+    
+    // Apply print preview styles to pages
+    var pages = document.querySelectorAll('.page');
+    pages.forEach(function(page, index) {
+        var content = page.querySelector('.page-content');
+        if (content) {
+            // Remove existing print classes
+            content.classList.remove('font-small', 'font-medium', 'font-large');
+            content.classList.remove('margin-normal', 'margin-wide', 'margin-narrow');
+            
+            // Add new classes
+            content.classList.add('font-' + fontSize);
+            content.classList.add('margin-' + margins);
+            
+            // Handle page numbers
+            var existingPageNum = page.querySelector('.page-number');
+            if (existingPageNum) {
+                existingPageNum.remove();
+            }
+            
+            if (pageNumbers !== 'none') {
+                var pageNumDiv = document.createElement('div');
+                pageNumDiv.className = 'page-number';
+                pageNumDiv.textContent = index + 1;
+                
+                if (pageNumbers === 'corner') {
+                    pageNumDiv.style.textAlign = (index % 2 === 0) ? 'left' : 'right';
+                    pageNumDiv.style.paddingLeft = (index % 2 === 0) ? '0.5in' : '0';
+                    pageNumDiv.style.paddingRight = (index % 2 === 1) ? '0.5in' : '0';
+                }
+                
+                page.appendChild(pageNumDiv);
+            }
+        }
+        
+        // Update illustration placeholders for print
+        var illustrations = page.querySelectorAll('.illustration-space > div:first-child');
+        illustrations.forEach(function(illus) {
+            illus.className = 'illustration-placeholder';
+            illus.innerHTML = '<strong>ILLUSTRATION PLACEHOLDER</strong><br>This space reserved for artwork';
+        });
+    });
+    
+    showStatus('Print preview updated! Use browser print to see exact layout.', 'success');
+}
+
+function showPrintPreview() {
+    // Apply print styles temporarily
+    document.body.classList.add('print-preview');
+    
+    // Open print dialog
+    setTimeout(function() {
+        window.print();
+        document.body.classList.remove('print-preview');
+    }, 500);
+}
+
+function generatePDF() {
+    showStatus('Opening print dialog - choose "Save as PDF" for best results', 'success');
+    
+    // Set up optimal print settings
+    updatePrintPreview();
+    
+    // Brief delay then open print dialog
+    setTimeout(function() {
+        window.print();
+    }, 1000);
+}
+
+function addBlankPage(afterPageIndex) {
+    var newPage = {
+        number: processedPages.length + 1,
+        contentItems: [],
+        formattedHTML: '',
+        plainText: '',
+        hasIllustration: true,
+        title: null,
+        wordCount: 0,
+        hasHeadings: false,
+        isChapterStart: false,
+        chapterTitle: null,
+        isBlank: true
+    };
+    
+    // Insert the blank page
+    if (afterPageIndex >= 0) {
+        processedPages.splice(afterPageIndex + 1, 0, newPage);
+    } else {
+        processedPages.push(newPage);
+    }
+    
+    // Renumber pages
+    for (var i = 0; i < processedPages.length; i++) {
+        processedPages[i].number = i + 1;
+    }
+    
+    // Re-render
+    renderFormattedPages(processedPages);
+    showStatus('Blank page added successfully!', 'success');
+}
+
+function deletePage(pageIndex) {
+    if (processedPages.length <= 1) {
+        showStatus('Cannot delete the only page!', 'error');
+        return;
+    }
+    
+    if (confirm('Are you sure you want to delete this page?')) {
+        processedPages.splice(pageIndex, 1);
+        
+        // Renumber pages
+        for (var i = 0; i < processedPages.length; i++) {
+            processedPages[i].number = i + 1;
+        }
+        
+        renderFormattedPages(processedPages);
+        showStatus('Page deleted successfully!', 'success');
+    }
 }
